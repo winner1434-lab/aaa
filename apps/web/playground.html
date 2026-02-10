@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DQ RMS Playground</title>
+  <style>
+    body{font-family:Inter,system-ui,sans-serif;background:#f8fafc;margin:0}
+    .container{max-width:1080px;margin:24px auto;padding:0 16px 24px}
+    .card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 8px rgba(15,23,42,.08);margin-bottom:16px}
+    .grid{display:grid;gap:16px}.two{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+    input,select,button{padding:8px;border:1px solid #cbd5e1;border-radius:8px}
+    input,select{width:100%;margin:6px 0 10px}
+    button{cursor:pointer}.primary{background:#1d4ed8;color:#fff;border-color:#1d4ed8}
+    .warning{background:#f59e0b;border-color:#b45309}
+    .chip{padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:12px}
+    .danger{background:#fee2e2;color:#b91c1c}.success{background:#dcfce7;color:#166534}
+    table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left}
+    ul{list-style:none;padding:0;margin:0}li{border-bottom:1px solid #e2e8f0;padding:8px 0}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <h1>敦謙 RMS 前端試玩頁（免安裝）</h1>
+    <p>可直接在瀏覽器打開此檔案遊玩：登入、事件關房、手動覆蓋、同步模擬。</p>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <h2>登入</h2>
+      <input id="username" value="am1" placeholder="username" />
+      <input id="password" value="Am123456" type="password" placeholder="password" />
+      <input id="totp" value="000000" placeholder="totp" />
+      <button onclick="login()">登入取得 JWT</button>
+      <p id="token">尚未登入</p>
+    </div>
+    <div class="card">
+      <h2>新增事件</h2>
+      <input id="eventName" value="五月天 2025 巡迴演唱會" />
+      <input id="eventDate" type="date" value="2025-03-15" />
+      <select id="impact"><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
+      <button class="warning" onclick="addEvent()">新增並套用規則</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>房價列表</h2>
+    <table><thead><tr><th>日期</th><th>房型</th><th>最終售價</th><th>狀態</th><th>來源</th></tr></thead><tbody id="rateBody"></tbody></table>
+  </div>
+
+  <div class="grid two">
+    <div class="card">
+      <h2>手動覆蓋</h2>
+      <input id="mDate" type="date" value="2025-03-15" />
+      <input id="mRoom" value="Standard" />
+      <input id="mRate" type="number" value="3999" />
+      <select id="mStatus"><option>OPEN</option><option>STOP_SELL</option></select>
+      <button onclick="manualOverride()">套用</button>
+    </div>
+    <div class="card">
+      <h2>PMS 同步</h2>
+      <button class="primary" onclick="sync()">Sync to PMS</button>
+      <p id="syncMsg">尚未同步</p>
+      <button onclick="resetData()">重置資料</button>
+    </div>
+  </div>
+
+  <div class="grid two">
+    <div class="card"><h2>事件清單</h2><ul id="eventList"></ul></div>
+    <div class="card"><h2>Audit Logs</h2><ul id="auditList"></ul></div>
+  </div>
+</div>
+<script>
+const initialRates=[
+{id:1,date:'2025-03-15',roomType:'Standard',finalRate:3600,status:'OPEN',source:'ORIGINAL'},
+{id:2,date:'2025-03-15',roomType:'Deluxe',finalRate:5200,status:'OPEN',source:'ORIGINAL'},
+{id:3,date:'2025-03-16',roomType:'Standard',finalRate:3700,status:'OPEN',source:'ORIGINAL'}
+];
+let rates=JSON.parse(JSON.stringify(initialRates));
+let events=[];let audits=[];
+const sourceText={ORIGINAL:'原始房價',MANUAL:'人工調整',EVENT_STOP_SELL:'事件關房'};
+function render(){
+  rateBody.innerHTML=rates.map(r=>`<tr><td>${r.date}</td><td>${r.roomType}</td><td>${r.finalRate}</td><td><span class="chip ${r.status==='STOP_SELL'?'danger':'success'}">${r.status}</span></td><td><span class="chip">${sourceText[r.source]}</span></td></tr>`).join('');
+  eventList.innerHTML=events.map(e=>`<li><b>${e.name}</b><div>${e.eventDate} / ${e.impact}</div></li>`).join('')||'<li>尚無事件</li>';
+  auditList.innerHTML=audits.map(a=>`<li><b>${a.action}</b><div>${a.detail}</div><small>${a.at}</small></li>`).join('')||'<li>尚無紀錄</li>';
+}
+function addAudit(action,detail){audits.unshift({action,detail,at:new Date().toLocaleString('zh-TW')});render();}
+function login(){const u=username.value;const t=totp.value;if(!u||t.length<6){alert('請輸入帳密與6碼TOTP');return;}token.textContent='demo-jwt-'+Date.now();addAudit('LOGIN',`使用者 ${u} 登入`);}
+function addEvent(){const e={name:eventName.value,eventDate:eventDate.value,impact:impact.value};events.unshift(e);if(e.impact==='HIGH'){let n=0;rates=rates.map(r=>{if(r.date===e.eventDate){n++;return {...r,status:'STOP_SELL',source:'EVENT_STOP_SELL'};}return r;});addAudit('AUTO_STOP_SELL',`${e.name} 影響 ${n} 筆`);}else addAudit('EVENT_RECEIVED',`${e.name}(${e.impact}) 僅記錄`);render();}
+function manualOverride(){let ok=false;rates=rates.map(r=>{if(r.date===mDate.value&&r.roomType===mRoom.value){ok=true;return {...r,finalRate:Number(mRate.value),status:mStatus.value,source:'MANUAL'};}return r;});if(!ok){alert('找不到資料');return;}addAudit('MANUAL_OVERRIDE',`${mDate.value} ${mRoom.value}`);render();}
+async function sync(){syncMsg.textContent='同步中...';await new Promise(r=>setTimeout(r,600));const ok=Math.random()>0.2;syncMsg.textContent=ok?'同步成功':'同步失敗：PMS_TIMEOUT';addAudit(ok?'SYNC_PMS':'SYNC_PMS_FAIL',syncMsg.textContent);}
+function resetData(){rates=JSON.parse(JSON.stringify(initialRates));events=[];audits=[];syncMsg.textContent='尚未同步';addAudit('RESET','重置資料');render();}
+render();
+</script>
+</body>
+</html>
